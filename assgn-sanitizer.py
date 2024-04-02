@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import shutil
+import re
 import argparse
 import sys
 from pathlib import Path
@@ -24,6 +25,9 @@ def sanitize_file(inpath: Path):
             return fid.readlines()
 
     comment_prefix = PREFIXES[inpath.suffix]
+    start_pattern = re.compile(f"^[ \t]*{comment_prefix}[ \t]*REPOBEE-SANITIZER-START")
+    end_pattern = re.compile(f"^[ \t]*{comment_prefix}[ \t]*REPOBEE-SANITIZER-END")
+    rpl_pattern = re.compile(f"^[ \t]*{comment_prefix}[ \t]*REPOBEE-SANITIZER-REPLACE-WITH")
 
     lines = []
     with inpath.open() as fid:
@@ -31,12 +35,12 @@ def sanitize_file(inpath: Path):
         for line in fid:
             trimmed = line.strip()
             if mode == Mode.PASSTHROUGH:
-                if trimmed.startswith(f"{comment_prefix}REPOBEE-SANITIZER-START"):
+                if start_pattern.match(trimmed):
                     mode = Mode.IN_SANITIZER
                 else:
                     lines.append(line)
             elif mode == Mode.ELSE_SANITIZER:
-                if trimmed.startswith(f"{comment_prefix}REPOBEE-SANITIZER-END"):
+                if end_pattern.match(trimmed):
                     mode = Mode.PASSTHROUGH
                 else:
                     idx = line.find(comment_prefix)
@@ -44,11 +48,9 @@ def sanitize_file(inpath: Path):
                     after = line[idx + len(comment_prefix) :]
                     lines.append(before + after)
             elif mode == Mode.IN_SANITIZER:
-                if trimmed.startswith(f"{comment_prefix}REPOBEE-SANITIZER-END"):
+                if end_pattern.match(trimmed):
                     mode = Mode.PASSTHROUGH
-                elif trimmed.startswith(
-                    f"{comment_prefix}REPOBEE-SANITIZER-REPLACE-WITH"
-                ):
+                elif rpl_pattern.match(trimmed):
                     mode = Mode.ELSE_SANITIZER
 
         if mode == Mode.IN_SANITIZER:
@@ -68,6 +70,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-r", "--recurse", action="store_true", help="Recurse into directory"
+    )
+    parser.add_argument(
+        "-f", "--force", action="store_true", help="Overwrite existing"
     )
     parser.add_argument("-o", "--outfile")
     parser.add_argument("infile")
@@ -104,10 +109,13 @@ if __name__ == "__main__":
                 # Then for each source file in the output, process and overwrite
                 for f in outfile.rglob("*"):
                     if f.is_file() and f.suffix in PREFIXES:
-                        lines = sanitize_file(f)
-                        with f.open("w") as outfile:
-                            for line in lines:
-                                outfile.write(line)
+                        try:
+                            lines = sanitize_file(f)
+                            with f.open("w") as outfile:
+                                for line in lines:
+                                    outfile.write(line)
+                        except RuntimeError:
+                            print(f"{f.name}")
 
         else:
             infile = Path(args.infile)
