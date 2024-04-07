@@ -69,9 +69,6 @@ if __name__ == "__main__":
         "Remove solution from files of a programming assignment"
     )
     parser.add_argument(
-        "-r", "--recurse", action="store_true", help="Recurse into directory"
-    )
-    parser.add_argument(
         "-f", "--force", action="store_true", help="Overwrite existing"
     )
     parser.add_argument("-o", "--outfile")
@@ -79,25 +76,24 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args:
-        if args.recurse:
+        if infile.is_dir():
+            # When infile is a directory, use recusive mode
             if not args.outfile:
                 print("Recursive mode requires outfile be provided")
                 sys.exit(1)
 
-            # If recurse flag is set, assume this is a directory and
+            # Do some checks
             infile = Path(args.infile)
             outfile = Path(args.outfile)
 
             if not infile.exists():
                 print(f"Input directory {args.infile} doesn't exist")
                 sys.exit(1)
-            elif not infile.is_dir():
-                print(f"Input {args.infile} is not a directory")
-                sys.exit(1)
 
             elif outfile.exists() and not args.force:
                 print(f"Output directory {args.outfile} already exists!")
                 sys.exit(1)
+
             elif outfile.exists() and not outfile.is_dir():
                 print(f"Output {args.outfile} is not a directory")
                 sys.exit(1)
