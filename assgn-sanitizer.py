@@ -63,6 +63,37 @@ def sanitize_file(inpath: Path):
             raise RuntimeError(msg)
     return lines
 
+def sanitize_directory(infile, outfile, force):
+    if not outfile:
+        msg = "Recursive mode requires outfile be provided"
+        raise RuntimeError(msg)
+
+    if not infile.exists():
+        msg = f"Input path {infile} doesn't exist"
+        raise OSError(msg)
+
+    elif outfile.exists() and not force:
+        msg = f"Output path {outfile} already exists!"
+        raise RuntimeError(msg)
+
+    elif outfile.exists() and not outfile.is_dir():
+        msg = f"Output {outfile} is not a directory"
+        raise OSError(msg)
+
+    else:
+        # First copy all files
+        shutil.copytree(infile, outfile)
+
+        # Then for each source file in the output, process and overwrite
+        for f in outfile.rglob("*"):
+            if f.is_file() and f.suffix in PREFIXES:
+                try:
+                    lines = sanitize_file(f)
+                    with f.open("w") as outfile:
+                        for line in lines:
+                            outfile.write(line)
+                except RuntimeError:
+                    print(f"{f.name}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -71,66 +102,28 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--force", action="store_true", help="Overwrite existing"
     )
-    parser.add_argument("-o", "--outfile")
+    parser.add_argument("-o", "--outfile", required=True)
     parser.add_argument("infile")
     args = parser.parse_args()
 
     if args:
-        if infile.is_dir():
-            # When infile is a directory, use recusive mode
-            if not args.outfile:
-                print("Recursive mode requires outfile be provided")
-                sys.exit(1)
+        infile = Path(args.infile)
 
-            # Do some checks
-            infile = Path(args.infile)
+        if not infile.exists():
+            print(f"Input file {infile} doesn't exist!")
+            sys.exit(1)
+
+        elif infile.is_file():
+           lines = sanitize_file(infile)
+           # Output contents to a file
+           with open(args.outfile, "w") as outfile:
+                for line in lines:
+                    outfile.write(line)
+
+        elif infile.is_dir():
             outfile = Path(args.outfile)
-
-            if not infile.exists():
-                print(f"Input directory {args.infile} doesn't exist")
-                sys.exit(1)
-
-            elif outfile.exists() and not args.force:
-                print(f"Output directory {args.outfile} already exists!")
-                sys.exit(1)
-
-            elif outfile.exists() and not outfile.is_dir():
-                print(f"Output {args.outfile} is not a directory")
-                sys.exit(1)
-
-            else:
-                # First copy all files
-                shutil.copytree(args.infile, args.outfile)
-
-                # Then for each source file in the output, process and overwrite
-                for f in outfile.rglob("*"):
-                    if f.is_file() and f.suffix in PREFIXES:
-                        try:
-                            lines = sanitize_file(f)
-                            with f.open("w") as outfile:
-                                for line in lines:
-                                    outfile.write(line)
-                        except RuntimeError:
-                            print(f"{f.name}")
+            sanitize_directory(infile, outfile, args.force)
 
         else:
-            infile = Path(args.infile)
-            if not infile.exists():
-                print(f"Input file {args.infile} doesn't exist!")
-                sys.exit(1)
-
-            elif not infile.is_file():
-                print(f"Input file {args.infile} is not a file")
-                sys.exit(1)
-
-            else:
-                lines = sanitize_file(infile)
-                if args.outfile:
-                    # Output contents to a file
-                    with open(args.outfile, "w") as outfile:
-                        for line in lines:
-                            outfile.write(line)
-                else:
-                    # Output contents to stdout
-                    for line in lines:
-                        sys.stdout.write(line)
+            print(f"Input file {infile} is not a file")
+            sys.exit(1)
