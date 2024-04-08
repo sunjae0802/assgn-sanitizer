@@ -27,7 +27,9 @@ def sanitize_file(inpath: Path):
     comment_prefix = PREFIXES[inpath.suffix]
     start_pattern = re.compile(f"^[ \t]*{comment_prefix}[ \t]*REPOBEE-SANITIZER-START")
     end_pattern = re.compile(f"^[ \t]*{comment_prefix}[ \t]*REPOBEE-SANITIZER-END")
-    rpl_pattern = re.compile(f"^[ \t]*{comment_prefix}[ \t]*REPOBEE-SANITIZER-REPLACE-WITH")
+    rpl_pattern = re.compile(
+        f"^[ \t]*{comment_prefix}[ \t]*REPOBEE-SANITIZER-REPLACE-WITH"
+    )
 
     lines = []
     with inpath.open() as fid:
@@ -63,6 +65,7 @@ def sanitize_file(inpath: Path):
             raise RuntimeError(msg)
     return lines
 
+
 def sanitize_directory(infile, outfile, force):
     if not outfile:
         msg = "Recursive mode requires outfile be provided"
@@ -95,13 +98,12 @@ def sanitize_directory(infile, outfile, force):
                 except RuntimeError:
                     print(f"{f.name}")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         "Remove solution from files of a programming assignment"
     )
-    parser.add_argument(
-        "-f", "--force", action="store_true", help="Overwrite existing"
-    )
+    parser.add_argument("-f", "--force", action="store_true", help="Overwrite existing")
     parser.add_argument("-o", "--outfile", required=True)
     parser.add_argument("infile")
     args = parser.parse_args()
@@ -114,9 +116,9 @@ if __name__ == "__main__":
             sys.exit(1)
 
         elif infile.is_file():
-           lines = sanitize_file(infile)
-           # Output contents to a file
-           with open(args.outfile, "w") as outfile:
+            lines = sanitize_file(infile)
+            # Output contents to a file
+            with open(args.outfile, "w") as outfile:
                 for line in lines:
                     outfile.write(line)
 
