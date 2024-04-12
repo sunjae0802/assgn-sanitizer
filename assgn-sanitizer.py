@@ -6,7 +6,11 @@ independently.
 
 Example:
 
+    # Single-file mode
     $ python3 assgn-sanitizer.py solution.c -o assignment.c
+
+    # Directory mode
+    $ python3 assgn-sanitizer.py hw1 -o hw1-sanitized
 """
 
 import shutil
@@ -17,7 +21,7 @@ from pathlib import Path
 from enum import Enum
 
 # Each type of programming language has it's own line comment.
-PREFIXES = {".py": "#", ".c": "//", ".cpp": "//", ".java": "//", ".fs": "//"}
+PREFIXES = {".py": "#", ".yml": "#", ".c": "//", ".cpp": "//", ".java": "//", ".fs": "//"}
 
 
 def sanitize_file_lines(inpath: Path, comment_prefix: str):
@@ -27,7 +31,7 @@ def sanitize_file_lines(inpath: Path, comment_prefix: str):
     rpl_pattern = re.compile(f"^[ \t]*{comment_prefix} REPOBEE-SANITIZER-REPLACE-WITH")
 
     # The function contains a state machine, so declare the states here
-    Mode = Enum("Enum", ["PASSTHROUGH", "IN_SANITIZER", "ELSE_SANITIZER"])
+    Mode = Enum("Enum", ["PASSTHROUGH", "IN_SANITIZER", "IN_REPLACE"])
 
     lines = []
     with inpath.open() as fid:
@@ -35,13 +39,13 @@ def sanitize_file_lines(inpath: Path, comment_prefix: str):
         for line in fid:
             if shred_pattern.match(line):
                 # This file should be skipped
-                return lines
-            if mode == Mode.PASSTHROUGH:
+                return []
+            elif mode == Mode.PASSTHROUGH:
                 if start_pattern.match(line):
                     mode = Mode.IN_SANITIZER
                 else:
                     lines.append(line)
-            elif mode == Mode.ELSE_SANITIZER:
+            elif mode == Mode.IN_REPLACE:
                 if end_pattern.match(line):
                     mode = Mode.PASSTHROUGH
                 else:
@@ -53,15 +57,15 @@ def sanitize_file_lines(inpath: Path, comment_prefix: str):
                 if end_pattern.match(line):
                     mode = Mode.PASSTHROUGH
                 elif rpl_pattern.match(line):
-                    mode = Mode.ELSE_SANITIZER
+                    mode = Mode.IN_REPLACE
 
         if mode == Mode.IN_SANITIZER:
-            msg = "Ended with REPOBEE-SANITIZER-START but no REPOBEE-SANITIZER-END"
+            msg = f"{inpath.name}:{len(lines)-1}: "
+            msg += "Ended with REPOBEE-SANITIZER-START but no REPOBEE-SANITIZER-END"
             raise RuntimeError(msg)
-        elif mode == Mode.ELSE_SANITIZER:
-            msg = (
-                "Ended with REPOBEE-SANITIZER-REPLACE-WITH but no REPOBEE-SANITIZER-END"
-            )
+        elif mode == Mode.IN_REPLACE:
+            msg = f"{inpath.name}:{len(lines)-1}: "
+            msg += "Ended with REPOBEE-SANITIZER-REPLACE-WITH but no REPOBEE-SANITIZER-END"
             raise RuntimeError(msg)
     return lines
 
@@ -73,8 +77,7 @@ def sanitize_file(inpath: Path, outpath: Path):
 
     # If the file is not a source file we can process, return the file as is
     if inpath.suffix not in PREFIXES:
-        with open(inpath) as fid:
-            return fid.readlines()
+        return
 
     # else, this has a known suffix, so let's process it
     comment_prefix = PREFIXES[inpath.suffix]
@@ -85,15 +88,13 @@ def sanitize_file(inpath: Path, outpath: Path):
             with outpath.open("w") as outfile:
                 for line in lines:
                     outfile.write(line)
-    except RuntimeError:
-        print(f"Sanitizing {inpath.name} failed")
+        else:
+            outpath.unlink()
+    except RuntimeError as e:
+        print(e)
 
 
 def sanitize_directory(infile, outfile):
-    if not outfile:
-        msg = "Recursive mode requires outfile be provided"
-        raise RuntimeError(msg)
-
     if not infile.exists():
         msg = f"Input path {infile} doesn't exist"
         raise OSError(msg)
@@ -132,10 +133,13 @@ if __name__ == "__main__":
             sys.exit(1)
 
         elif infile.is_file():
-            sanitize_file(infile, Path(args.outfile))
+            outfile = Path(args.outfile)
+            shutil.copyfile(infile, outfile)
+            sanitize_file(infile, outfile)
 
         elif infile.is_dir():
-            sanitize_directory(infile, Path(args.outfile))
+            outfile = Path(args.outfile)
+            sanitize_directory(infile, outfile)
 
         else:
             print(f"Input file {infile} is not a file")
